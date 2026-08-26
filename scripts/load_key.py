@@ -10,7 +10,7 @@ import re
 import sys
 from pathlib import Path
 
-SRC = Path(r"C:/Projects/APPS/AI-agentic-loop/.env")
+SRC = Path(__file__).resolve().parent.parent / ".env"
 
 
 def load() -> str:
