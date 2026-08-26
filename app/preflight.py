@@ -89,6 +89,21 @@ def check_index() -> bool:
     if not corpus.exists():
         _fail(f"No corpus at {corpus}. Run: python -m app.ingest")
         return False
+
+    # Dimension mismatch is the #1 silent failure when switching provider
+    # modes: offline hash embeddings are 512-dim, OpenAI's are 1536. A stale
+    # index retrieves nonsense (or raises) instead of failing loudly.
+    import json as _json
+    meta = _json.loads(corpus.read_text(encoding="utf-8"))
+    built_with = meta.get("provider", "unknown")
+    expected = "offline-hash" if config.OFFLINE_MODE else config.EMBED_MODEL
+    if built_with != expected:
+        _fail(f"Index was built with {built_with!r} but you are running "
+              f"{expected!r}.")
+        print("       -> rm -rf .index && python -m app.ingest")
+        return False
+    _ok(f"Index provider matches runtime ({built_with})")
+
     try:
         from app.retriever import Retriever
         r = Retriever()

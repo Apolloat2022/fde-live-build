@@ -38,7 +38,20 @@ _STOP = {
 
 
 def _terms(text: str) -> set[str]:
-    return {t for t in re.findall(r"[a-z0-9,\.]+", text.lower()) if t not in _STOP and len(t) > 2}
+    """Content terms for overlap scoring.
+
+    Internal punctuation is kept so "10,000" and "43.5" survive as single
+    tokens, but LEADING/TRAILING punctuation is stripped -- otherwise
+    "minutes." and "minutes" are different tokens and groundedness reports
+    false unsupported terms. That bug made a perfectly grounded answer score
+    0.00; caught by comparing live-LLM output against the offline run.
+    """
+    out = set()
+    for t in re.findall(r"[a-z0-9][a-z0-9,\.]*", text.lower()):
+        t = t.strip(".,")
+        if t and t not in _STOP and len(t) > 2:
+            out.add(t)
+    return out
 
 
 def _sentences(text: str) -> List[str]:

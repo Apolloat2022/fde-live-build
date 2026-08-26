@@ -177,48 +177,82 @@ Exit 0 = safe to demo.
 .venv/Scripts/python.exe -m eval.run_eval      # expect RESULT: PASS
 ```
 
-### The API key question — SETTLED (checked Aug 25)
+### The API key question — SETTLED, you are LIVE (verified Aug 25)
 
-**Your OpenAI key authenticates but has no quota.** Verified two ways:
+You added $5 of credit and the live path is **verified working**:
 
-- `GET /v1/models` → **HTTP 200** (the key is valid, auth is fine)
-- Any embedding or chat call → **429 `insufficient_quota`**
+```
+Embeddings live (text-embedding-3-small), 1536 dims
+Chat live (gpt-4o-mini), ~1.2 s
+RAG triad: all five gates PASS on gpt-4o-mini
+```
 
-That is a **billing** state, not a bad key and not a code bug. So unless you
-add credits at platform.openai.com/account/billing tonight, **you are
-demoing offline tomorrow.** That is fine — the repo is built for it — but
-walk in knowing it, rather than discovering it at 00:20 on a share screen.
+**The one thing that will bite you: the index is embedding-specific.**
+Offline vectors are 512-dim hashes; OpenAI's are 1536-dim. If you switch
+modes without re-ingesting, retrieval silently breaks.
 
-To load the key and re-check (30 seconds, do it in the morning in case
-billing changed):
+**Always re-run ingest after changing provider mode:**
 
 ```bash
 export OPENAI_API_KEY=$(.venv/Scripts/python.exe scripts/load_key.py --emit)
-OFFLINE_MODE=0 .venv/Scripts/python.exe -m app.preflight
+export OFFLINE_MODE=0
+rm -rf .index                          # dimensions change; rebuild
+.venv/Scripts/python.exe -m app.ingest # confirm "dim": 1536
+.venv/Scripts/python.exe -m app.preflight
 ```
 
-- Says `mode: live` → you have credits, demo live.
-- Says `insufficient_quota` → `unset OPENAI_API_KEY`, demo offline. Do not
-  spend a single minute debugging it on camera.
+Expect `READY TO DEMO (mode: live)`. Budget ~30 s for ingest (21 chunks) and
+about 1 s per eval question.
 
-**Say this once, early, without apology:**
-> "I've deliberately made the demo path independent of network and
-> credentials — it runs a deterministic local embedding and extractive
-> answer stack. The provider seam is one module, `app/providers.py`, so
-> switching to gpt-4o is an environment variable, not a refactor."
+**Fallback, if the API misbehaves mid-assessment:**
+```bash
+unset OPENAI_API_KEY && rm -rf .index && python -m app.ingest && python -m app.preflight
+```
+Back to offline in under 10 seconds. Rehearse this once tonight so your
+hands know it.
 
-Then, if you want the strongest version of the moment, **show** it:
-`app/providers.py` is ~40 lines and every provider call goes through
-`chat()` and `embed_texts()`. Claiming a clean seam is ordinary; opening the
-file and proving it in ten seconds is not.
+**Budget note:** $5 is plenty. A full 13-question eval run costs about a
+cent on gpt-4o-mini. You would have to run it hundreds of times to notice.
 
-**If asked directly "why aren't you calling a real LLM?"** — answer plainly:
-> "The account backing this key is out of quota. I found that in pre-flight
-> before I started rather than mid-demo, which is exactly why I run a
-> pre-flight. The architecture doesn't change; only the provider does."
+### Live vs offline — what actually changes
 
-Owning it is a competence signal. Bluffing that offline was always the plan
-is a risk — they may ask to see it call the API.
+| | offline | live (gpt-4o-mini) |
+|---|---|---|
+| Dense separation margin | overlaps (lexical carries the gate) | **+0.18, separates on its own** |
+| Answer style | extractive sentence stitching | fluent prose |
+| Latency per question | ~5 ms | ~1000 ms |
+| Groundedness | 1.00 | 0.92–1.00 (varies run to run) |
+
+Two talking points fall out of that table, and both are strong:
+
+**On the calibrated threshold holding up:** `MIN_DENSE=0.45` was calibrated
+against hash embeddings. When real embeddings came online, calibration
+independently suggested **0.4489** — within 0.001. Say it:
+> "The threshold I calibrated offline transferred to production embeddings
+> almost exactly. That's the payoff for calibrating against a held-out probe
+> set instead of hand-tuning against the demo questions."
+
+**On run-to-run variance:** the same code scored 0.92 then 1.00 on
+consecutive live runs, because LLM output varies even at temperature 0. If
+groundedness dips mid-demo, don't panic — explain it:
+> "That's non-determinism in the generator, not a regression. It's also the
+> argument for a threshold gate rather than a target number: I care that it
+> clears 0.80, not that it hits a specific value."
+
+### A bug the live run exposed in my own eval harness
+
+Worth telling, because it's the same class of story as the calibration one:
+
+`p1-sla` scored **0.00 groundedness** on a visibly perfect answer. The cause
+was my tokenizer: `[a-z0-9,\.]+` kept trailing punctuation, so `"minutes."`
+in the answer never matched `"minutes"` in the context. The offline
+extractive path copies context sentences verbatim, so punctuation always
+lined up and the bug stayed invisible. A real generator rephrases — and
+surfaced it immediately.
+
+> "Switching to a real LLM found a bug in my evaluator, not my system. That's
+> a good argument for running the harness against more than one generator —
+> a metric that only ever sees one output style is undertested."
 
 ---
 

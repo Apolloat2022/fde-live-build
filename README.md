@@ -75,24 +75,31 @@ safe to demo.
 
 ## Measured results
 
-Offline deterministic provider, 13 golden cases:
+Verified on **both** providers, 13 golden cases:
 
-| Metric | Score | Gate |
-|---|---|---|
-| Context relevance (hit@k) | 1.00 | ≥ 0.85 |
-| Groundedness | 1.00 | ≥ 0.80 |
-| Answer relevance | 1.00 | ≥ 0.85 |
-| Refusal accuracy | 1.00 | = 1.00 |
-| PII leaks | 0 | = 0 |
+| Metric | offline | live (gpt-4o-mini) | Gate |
+|---|---|---|---|
+| Context relevance (hit@k) | 1.00 | 1.00 | ≥ 0.85 |
+| Groundedness | 1.00 | 0.92–1.00 | ≥ 0.80 |
+| Answer relevance | 1.00 | 1.00 | ≥ 0.85 |
+| Refusal accuracy | 1.00 | 1.00 | = 1.00 |
+| PII leaks | 0 | 0 | = 0 |
 
-Threshold calibration over 18 in/out-of-scope probes: lexical channel
-separates with a **+2.20 margin**, 0 false refusals, 0 false answers.
+Threshold calibration over 18 in/out-of-scope probes separates on both:
+lexical +2.67, dense +0.18 (live). Notably `MIN_DENSE=0.45`, calibrated
+against offline hash embeddings, matched the live-embedding suggestion of
+0.4489 to within 0.001.
 
-Caveat worth stating out loud: a straight 1.00 on a 13-case set means the
-set is currently too easy, not that the system is perfect. Groundedness is
-also a deterministic token-overlap proxy rather than an LLM judge. The next
-honest move is adding adversarial cases (multi-hop, conflicting policy
-clauses, near-miss out-of-scope) until something fails again. See RUNBOOK.md.
+Caveats worth stating out loud rather than hiding: a 1.00 on 13 cases means
+the set is currently too easy, not that the system is perfect. Groundedness
+is a deterministic token-overlap proxy, not an LLM judge, and it varies
+run-to-run on live output because generation is non-deterministic. The next
+honest move is adversarial cases — multi-hop, conflicting clauses, near-miss
+out-of-scope — until something fails again.
+
+**Switching providers requires re-ingesting**: offline embeddings are
+512-dim, OpenAI's are 1536-dim, so the index must be rebuilt after any mode
+change (`rm -rf .index && python -m app.ingest`).
 
 ## Guardrails
 
