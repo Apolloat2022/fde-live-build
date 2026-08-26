@@ -59,9 +59,19 @@ everything else is unchanged.
 |---|---|---|
 | Orchestration | LangGraph | explicit state machine; conditional refusal edges are first-class |
 | Retrieval | dense + BM25 hybrid | users search by identifier *and* by paraphrase |
-| Vector store | JSON + in-process BM25 | zero infra risk in a timeboxed build; `Retriever` is the swap seam for pgvector |
+| Vector store | ChromaDB, with a JSON fallback | one `VectorStore` interface; parity asserted by tests, so a backend failure can't take the demo down |
 | Generation | OpenAI, or deterministic extractive fallback | demo cannot fail on network or credentials |
 | Memory | rolling window + coreference rewrite | follow-ups resolve without a full agent loop |
+
+## Pre-flight
+
+```bash
+python -m app.preflight
+```
+
+Checks the provider actually works (not just that a key exists), the vector
+backend, the index, all three guardrails, and every eval gate. Exit 0 means
+safe to demo.
 
 ## Measured results
 
@@ -98,16 +108,17 @@ nothing about the redactor.
 ## Layout
 
 ```
-app/     config, providers, ingest, retriever, guardrails, orchestrator, api
+app/     config, providers, ingest, vectorstore, retriever, guardrails,
+         orchestrator, api, preflight
 eval/    golden_set, run_eval (RAG triad), calibration (threshold sweep)
-tests/   guardrail unit tests + end-to-end pipeline tests
+tests/   guardrails, pipeline, vector-backend parity  (40 tests)
 ui/      streamlit demo
 data/    synthetic BFSI policy corpus
 ```
 
 ## Production deltas
 
-- JSON index → pgvector (linear scan dies past ~10k chunks)
+- Chroma → pgvector (same `VectorStore` interface; clients already run Postgres)
 - Overlap groundedness proxy → LLM judge on a nightly larger sample
 - Eval gates → CI, blocking deploy on retrieval regression
 - Tenant isolation → server-side metadata filters + per-boundary eval cases

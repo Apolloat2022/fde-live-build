@@ -23,6 +23,9 @@ CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-4o-mini")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
 
 # --- Retrieval ----------------------------------------------------------
+# VECTOR_BACKEND: "chroma" (default, the stack named in the brief) or "json"
+# (dependency-free parachute). Both sit behind app.vectorstore.VectorStore.
+VECTOR_BACKEND = os.getenv("VECTOR_BACKEND", "chroma")
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "900"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "150"))
 TOP_K = int(os.getenv("TOP_K", "4"))

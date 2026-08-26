@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
 from app import config
 from app.providers import embed_texts
+from app.vectorstore import get_store
 
 
 @dataclass
@@ -108,7 +109,8 @@ def build_chunks(data_dir: Path) -> List[Chunk]:
     return chunks
 
 
-def ingest(data_dir: Path | None = None, index_dir: Path | None = None) -> dict:
+def ingest(data_dir: Path | None = None, index_dir: Path | None = None,
+           backend: str | None = None) -> dict:
     data_dir = data_dir or config.DATA_DIR
     index_dir = index_dir or config.INDEX_DIR
     index_dir.mkdir(parents=True, exist_ok=True)
@@ -121,19 +123,31 @@ def ingest(data_dir: Path | None = None, index_dir: Path | None = None) -> dict:
     for c, v in zip(chunks, vectors):
         c.embedding = v
 
-    payload = {
+    records = [
+        {"id": c.id, "doc_id": c.doc_id, "source": c.source,
+         "section": c.section, "text": c.text, "search_text": c.search_text}
+        for c in chunks
+    ]
+
+    store = get_store(backend)
+    if hasattr(store, "reset"):
+        store.reset()          # full rebuild; ingest is idempotent
+    store.upsert(records, vectors)
+
+    # The BM25 half of hybrid retrieval needs the raw corpus regardless of
+    # which vector backend is active, so it is always persisted alongside.
+    corpus_path = index_dir / "corpus.json"
+    corpus_path.write_text(json.dumps({
         "provider": "offline-hash" if config.OFFLINE_MODE else config.EMBED_MODEL,
-        "dim": len(vectors[0]),
-        "chunks": [asdict(c) for c in chunks],
-    }
-    out = index_dir / "index.json"
-    out.write_text(json.dumps(payload), encoding="utf-8")
+        "chunks": records,
+    }), encoding="utf-8")
 
     return {
+        "backend": store.name,
         "documents": len({c.doc_id for c in chunks}),
         "chunks": len(chunks),
         "dim": len(vectors[0]),
-        "index_path": str(out),
+        "index_dir": str(index_dir),
     }
 
 

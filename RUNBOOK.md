@@ -159,7 +159,120 @@ Then open Streamlit and show the **agent trace expander**. Say:
 
 ---
 
-## Pre-flight (do this tonight, and again 15 min before)
+## Pre-flight (do this tonight, and again the moment you sit down)
+
+```bash
+cd C:/Projects/APPS/fde-live-build
+.venv/Scripts/python.exe -m app.ingest
+.venv/Scripts/python.exe -m app.preflight     # <- the only one you must run
+```
+
+`preflight` checks the provider (does the key actually WORK, not just exist),
+the vector backend, the index, all three guardrails, and every eval gate.
+Exit 0 = safe to demo.
+
+```bash
+.venv/Scripts/python.exe -m pytest tests/ -q   # expect 40 passed
+.venv/Scripts/python.exe -m eval.calibration   # expect CALIBRATION: PASS
+.venv/Scripts/python.exe -m eval.run_eval      # expect RESULT: PASS
+```
+
+### The API key question — settle it BEFORE 00:00
+
+As of tonight there is **no `OPENAI_API_KEY` in your environment**. The repo
+runs fully offline, so this is survivable, but decide deliberately:
+
+- **If you have a key tomorrow:** export it, run `python -m app.preflight`,
+  confirm it says `mode: live`. Budget 3 minutes. If preflight reports the
+  key is broken, set `OFFLINE_MODE=1` and move on — do not debug auth on
+  camera.
+- **If you don't:** run offline and say this once, early, without apology:
+  > "I've made the demo path independent of network and credentials. It runs
+  > a deterministic local embedding and extractive-answer stack. The provider
+  > seam is one function — `app/providers.py` — so switching to gpt-4o is an
+  > env var, not a refactor."
+
+That framing turns a missing key from a gap into a design decision. But
+**only** say it if it's true, and it is: `chat()` and `embed_texts()` are the
+sole call sites.
+
+---
+
+## Backend switching — a 20-second move that proves an architecture claim
+
+```bash
+python -m app.ingest                      # chroma (default)
+VECTOR_BACKEND=json python -m app.ingest  # fallback, identical results
+```
+
+`tests/test_vectorstore.py` asserts both backends return the same top source
+and comparable similarity units. If they ask "what if Chroma isn't available
+in our environment?", run it live instead of answering.
+
+---
+
+## The multi-agent multitasking angle
+
+Your prep notes say to launch background agents while you code. Real talk on
+how to do that without it backfiring:
+
+**Do:** delegate work that is *verifiable at a glance and off the critical
+path* — the presentation slide, the README, extra eval cases, docstrings.
+
+**Don't:** delegate the state machine, the guardrails, or the retrieval
+logic. If a background agent writes your core and it's subtly wrong, you
+will be debugging unfamiliar code on camera with an audience. That is the
+worst position in this entire assessment.
+
+**The narration that scores points** (say it when you kick one off):
+> "I'm running a background agent to draft the business-facing slide while I
+> build the state machine. I'll review its output before it ships — I don't
+> merge anything I haven't read. Parallelism is only a win if you keep the
+> verification step."
+
+That last sentence is the Lead-level distinction. Anyone can spawn agents;
+the signal is knowing what *not* to delegate and saying so.
+
+---
+
+## Q&A drill — answer these out loud tonight
+
+**"Why LangGraph instead of a LangChain chain?"**
+> A chain is a DAG — it runs start to finish. My flow needs conditional
+> early exit: triage can refuse before retrieval ever runs, and the grounding
+> gate can refuse after retrieval but before generation. Those are edges that
+> skip nodes, which is a graph, not a chain. It also gives me typed state, so
+> the trace you see in the UI is the actual state object, not logging I
+> bolted on. If this grew a retry-with-rewritten-query loop, that's one more
+> conditional edge — in a chain it's a rewrite.
+
+**"Walk me through your evaluation harness."**
+> Three metrics, measured separately on purpose. Context relevance is hit@k
+> against a golden expected source — that isolates *retrieval*. Answer
+> relevance checks required facts appear — that isolates *generation*. If
+> context is 1.0 and answer drops, I know the bug is in the generator, not
+> the index. Groundedness checks each answer sentence's terms are supported
+> by retrieved context. Plus refusal accuracy and a zero-tolerance PII gate.
+> They're wired as ship gates with thresholds, so it returns a non-zero exit
+> code — it can run in CI and block a deploy.
+
+**"How would this run in production?"**
+> Chroma to pgvector — same `VectorStore` interface, and BFSI clients already
+> run Postgres so it's not a procurement conversation. The overlap-based
+> groundedness proxy becomes an LLM judge on a nightly sample, with the fast
+> proxy still on every commit. Gates move into CI. Tenant isolation becomes
+> server-side metadata filters driven by session entitlements, never the
+> request body, with an eval case per boundary asserting zero cross-tenant
+> results.
+
+**"What would you do with more time?"**
+> Harden the eval set until it fails again — multi-hop questions across two
+> policies, deliberately conflicting clauses, near-miss out-of-scope. A
+> harness that always passes has stopped being informative.
+
+---
+
+## Pre-flight (short form)
 
 ```bash
 cd C:/Projects/APPS/fde-live-build
