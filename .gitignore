@@ -8,3 +8,5 @@ __pycache__/
 *.key
 .pytest_cache/
 .index.bak/
+.cache_sec/
+data_brief/

@@ -27,6 +27,7 @@ from typing import Annotated, Any, Dict, List, Literal, TypedDict
 from langgraph.graph import END, StateGraph
 
 from app import config, guardrails
+from app.advisory_guard import check_advisory
 from app.providers import chat, provider_label
 from app.retriever import Hit, Retriever
 
@@ -45,6 +46,8 @@ class AgentState(TypedDict, total=False):
     verdict: str
     refused: bool
     refusal_reason: str
+    refusal_message: str
+    source_mix: List[str]
     pii_findings: List[str]
     trace: Annotated[List[Dict[str, Any]], lambda a, b: (a or []) + (b or [])]
 
@@ -73,6 +76,18 @@ def triage(state: AgentState) -> AgentState:
             "refused": True,
             "refusal_reason": guard.reason,
             "trace": [_step("triage", t0, blocked=guard.reason, patterns=guard.findings)],
+        }
+
+    # Advisory gate: this is a research tool, not an advisor. Requests for
+    # recommendations, suitability calls, or price targets are refused by
+    # design and routed to a licensed human (XA-002 / Advisers Act).
+    adv = check_advisory(q)
+    if not adv.ok:
+        return {
+            "refused": True,
+            "refusal_reason": adv.reason,
+            "refusal_message": adv.message,
+            "trace": [_step("triage", t0, blocked=adv.reason, patterns=adv.findings)],
         }
 
     history = state.get("history") or []
@@ -105,14 +120,24 @@ def retrieve(state: AgentState) -> AgentState:
     # Comparison questions need a wider net to cover both sides.
     k = config.TOP_K + 2 if state.get("intent") == "comparison" else config.TOP_K
     hits = get_retriever().search(state["rewritten"], top_k=k)
+    # Source mix makes the fusion visible: an advisor can see the brief drew
+    # on the filing AND the house view, not just one of them.
+    mix = []
+    for h in hits:
+        kind = ("SEC filing" if h.source.startswith("SEC-")
+                else "X Advisory internal")
+        if kind not in mix:
+            mix.append(kind)
     return {
         "hits": hits,
+        "source_mix": mix,
         "trace": [
             _step(
                 "retrieve",
                 t0,
                 k=k,
                 top_score=hits[0].score if hits else 0.0,
+                source_mix=mix,
                 sources=[h.source for h in hits],
             )
         ],
@@ -207,7 +232,8 @@ def finalize(state: AgentState) -> AgentState:
     t0 = time.time()
     if state.get("refused"):
         reason = state.get("refusal_reason", "unknown")
-        text = config.REFUSAL_TEXT
+        # Advisory refusals carry their own regulator-aware explanation.
+        text = state.get("refusal_message") or config.REFUSAL_TEXT
         if reason == "prompt_injection_suspected":
             text = (
                 "That request looks like an attempt to override my operating "

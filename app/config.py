@@ -9,7 +9,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA_DIR = ROOT / "data"
+# Corpus selection: `data` = BFSI policy demo, `data_brief` = X Advisory
+# pre-call brief. Overridable so both demos coexist without a code change.
+DATA_DIR = ROOT / os.getenv("DATA_DIR", "data_brief")
 INDEX_DIR = ROOT / ".index"
 EVAL_DIR = ROOT / "eval"
 

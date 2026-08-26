@@ -56,7 +56,7 @@ if generate and st.session_state.question.strip():
 result = st.session_state.result
 
 if result and result.get("_mock"):
-    st.warning("DEMO MODE -- backend unavailable, showing sample data", icon="i")
+    st.warning("DEMO MODE -- backend unavailable, showing sample data")
 
 quote = st.session_state.get("quote")
 if quote:
