@@ -177,24 +177,48 @@ Exit 0 = safe to demo.
 .venv/Scripts/python.exe -m eval.run_eval      # expect RESULT: PASS
 ```
 
-### The API key question — settle it BEFORE 00:00
+### The API key question — SETTLED (checked Aug 25)
 
-As of tonight there is **no `OPENAI_API_KEY` in your environment**. The repo
-runs fully offline, so this is survivable, but decide deliberately:
+**Your OpenAI key authenticates but has no quota.** Verified two ways:
 
-- **If you have a key tomorrow:** export it, run `python -m app.preflight`,
-  confirm it says `mode: live`. Budget 3 minutes. If preflight reports the
-  key is broken, set `OFFLINE_MODE=1` and move on — do not debug auth on
-  camera.
-- **If you don't:** run offline and say this once, early, without apology:
-  > "I've made the demo path independent of network and credentials. It runs
-  > a deterministic local embedding and extractive-answer stack. The provider
-  > seam is one function — `app/providers.py` — so switching to gpt-4o is an
-  > env var, not a refactor."
+- `GET /v1/models` → **HTTP 200** (the key is valid, auth is fine)
+- Any embedding or chat call → **429 `insufficient_quota`**
 
-That framing turns a missing key from a gap into a design decision. But
-**only** say it if it's true, and it is: `chat()` and `embed_texts()` are the
-sole call sites.
+That is a **billing** state, not a bad key and not a code bug. So unless you
+add credits at platform.openai.com/account/billing tonight, **you are
+demoing offline tomorrow.** That is fine — the repo is built for it — but
+walk in knowing it, rather than discovering it at 00:20 on a share screen.
+
+To load the key and re-check (30 seconds, do it in the morning in case
+billing changed):
+
+```bash
+export OPENAI_API_KEY=$(.venv/Scripts/python.exe scripts/load_key.py --emit)
+OFFLINE_MODE=0 .venv/Scripts/python.exe -m app.preflight
+```
+
+- Says `mode: live` → you have credits, demo live.
+- Says `insufficient_quota` → `unset OPENAI_API_KEY`, demo offline. Do not
+  spend a single minute debugging it on camera.
+
+**Say this once, early, without apology:**
+> "I've deliberately made the demo path independent of network and
+> credentials — it runs a deterministic local embedding and extractive
+> answer stack. The provider seam is one module, `app/providers.py`, so
+> switching to gpt-4o is an environment variable, not a refactor."
+
+Then, if you want the strongest version of the moment, **show** it:
+`app/providers.py` is ~40 lines and every provider call goes through
+`chat()` and `embed_texts()`. Claiming a clean seam is ordinary; opening the
+file and proving it in ten seconds is not.
+
+**If asked directly "why aren't you calling a real LLM?"** — answer plainly:
+> "The account backing this key is out of quota. I found that in pre-flight
+> before I started rather than mid-demo, which is exactly why I run a
+> pre-flight. The architecture doesn't change; only the provider does."
+
+Owning it is a competence signal. Bluffing that offline was always the plan
+is a risk — they may ask to see it call the API.
 
 ---
 

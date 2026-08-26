@@ -3,4 +3,7 @@
 __pycache__/
 *.pyc
 .env
+.env.*
+!.env.example
+*.key
 .pytest_cache/
