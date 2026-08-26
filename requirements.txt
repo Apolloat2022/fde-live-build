@@ -1,0 +1,10 @@
+langgraph
+langchain-core
+langchain-openai
+langchain-text-splitters
+streamlit
+fastapi
+uvicorn
+pydantic
+python-dotenv
+pytest
