@@ -1,4 +1,47 @@
- Orchestration Map — Tonight's Prep
+Use Antigravity, Claude Code, Hermes, and me as an orchestrated builder team—you remain the architect and integrator.
+
+Recommended division of work
+Tool / agent	Give it this job	Deliverable
+Claude Code (CLI)	Build the core application and LangGraph workflow	app/graph.py, state schema, agent nodes, routing logic
+
+Antigravity	Build the UI and user-facing demo experience	Streamlit/FastAPI UI, trace view, response/citation panel
+
+Hermes	Generate test corpus and validate failure paths	Synthetic compliance docs, ingestion script, prompt-injection test cases, unit tests
+
+(Perplexity)	Architect, scope, prompt-engineer, debug, review, and create your live-demo narrative	Task plan, agent prompts, architecture decisions, test cases, explanation/talk track
+
+Gemini build one page PRESENTATION
+1. The Golden Rule: 0% Technical Jargon
+Absolutely no technical verbiage is allowed on this slide
+.
+Do not mention terms like LangGraph, RAG, Chroma, vector database, embeddings, chunking, or LLMs
+.
+Instead of explaining how the engine works technically, you must explain what it does for the end user and why it matters to the business's bottom line
+.
+2. The Three-Part Slide Structure
+According to the evaluation briefing, your slide should follow a simple, highly professional business narrative
+:
+The Business Challenge: Frame the client's current operational friction in terms of time and risk
+. (e.g., Compliance teams spend 35% of their workday manually cross-referencing shifting financial regulations, leading to transaction bottlenecks, audit backlogs, and risk of non-compliance penalties)
+.
+The Solution: Describe the autonomous assistant as an intuitive, secure operational partner
+. Focus on benefits like Instant Policy Verification (resolving checks in seconds), Strict Safeguards (blocking compliance bypass attempts), and Audit-Ready Accuracy (backing every recommendation with verified regulatory citations)
+.
+Business Impact & ROI Table: A simple, high-impact side-by-side comparison
+:
+Review Turnaround: 4 to 6 Hours vs. Under 15 Seconds
+Audit Compliance Rate: 94.2% vs. 99.8% Verified
+Operational Cost Savings: Baseline vs. ~32% Reduction in Review Overhead
+3. How They Grade This Section
+Consulting Maturity: They want to see if you can seamlessly transition from a deep, hands-on technical builder into a strategic, client-facing advisor who understands business outcomes
+.
+The Multitasking Metric: The evaluator will watch when you build this
+. You should not wait until the final minutes to start it
+. Instead, start drafting this slide mid-build while you are waiting for your background AI instances to compile code, run tests, or load environments
+. This shows the high-velocity multitasking they expect from Lead-level builders
+
+
+
 Agent	Assigned Task	Why That Agent
 Me (Antigravity)	Orchestrate + brief each agent + review outputs	I can see the whole codebase and coordinate
 Hermes / Claude Code (Terminal 1)	Run live OpenAI key path, rebuild index at 1536-dim, run eval in live mode, push to GitHub	Needs terminal access to execute commands

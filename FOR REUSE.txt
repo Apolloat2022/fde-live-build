@@ -1,0 +1,24 @@
+🔍 Discovered Repositories & Tooling on Your Machine
+Here are the repositories found on your system, along with how to leverage them for your preparation and live build:
+
+
+Repository / Project
+Local File Path
+Purpose & How to Use with Claude Code / AI
+Career-Ops (Claude Code Native)
+C:/Projects/AI_JOB_SEARCH/career-ops-fresh
+C:/Projects/AI_JOB_SEARCH/career-ops
+Built specifically for Claude Code (CLAUDE.md, workflows, interview intel, and story-bank generation). Run claude inside this directory to trigger custom modes and STAR+R prep.
+AI Agentic Loops
+C:/Projects/APPS/AI-agentic-loop
+Contains modular implementations of stateful ReAct loops, reflection/evaluator loops, planning agents, and multi-agent swarms.
+FDE Academy / Architect Framework
+C:/Projects/APPS/FDE-course
+Full production Forward Deployed Engineering system docs (FDE_ARCHITECT.md), architectural decision records, and capstone templates.
+FDE Executive & Tech Guides
+C:/Users/Apollo Technologies/UST_Senior_FDE_Guide_Full.html
+Complete elevator pitches, consulting talk tracks, and technical cheat sheets.
+OpenMontage (Agentic Video)
+C:/Users/Apollo Technologies/Projects/OpenMontage
+Enterprise agentic orchestrator for media pipelines.
+
