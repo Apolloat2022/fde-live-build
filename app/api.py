@@ -41,11 +41,24 @@ class AskResponse(BaseModel):
 
 @api.get("/health")
 def health() -> Dict[str, Any]:
+    # Check the corpus file the retriever actually loads. The old check
+    # looked for index.json, which stopped existing when Chroma became the
+    # default backend -- so health reported index_present:false while the
+    # service was answering fine. A health check that lies is worse than none.
+    corpus = config.INDEX_DIR / "corpus.json"
+    built_with = None
+    if corpus.exists():
+        import json as _json
+        built_with = _json.loads(corpus.read_text(encoding="utf-8")).get("provider")
+    expected = "offline-hash" if config.OFFLINE_MODE else config.EMBED_MODEL
     return {
-        "status": "ok",
+        "status": "ok" if (corpus.exists() and built_with == expected) else "degraded",
         "provider": provider_label(),
         "offline_mode": config.OFFLINE_MODE,
-        "index_present": (config.INDEX_DIR / "index.json").exists(),
+        "vector_backend": config.VECTOR_BACKEND,
+        "index_present": corpus.exists(),
+        "index_built_with": built_with,
+        "index_matches_runtime": built_with == expected,
     }
 
 

@@ -1,0 +1,87 @@
+ Orchestration Map — Tonight's Prep
+Agent	Assigned Task	Why That Agent
+Me (Antigravity)	Orchestrate + brief each agent + review outputs	I can see the whole codebase and coordinate
+Hermes / Claude Code (Terminal 1)	Run live OpenAI key path, rebuild index at 1536-dim, run eval in live mode, push to GitHub	Needs terminal access to execute commands
+Comet / Claude Code (Terminal 2)	Write all 4 domain corpus .md files (Healthcare, HR, Legal, Supply Chain) directly into data/ variants	Parallel file generation
+Me via subagent	Generate the non-technical executive business slide (the 1-pager deliverable)	Artifact creation, no terminal needed
+Spinning up the subagent now, and giving you the exact prompts to paste into Claude Code / Hermes / Comet right now:
+
+Subagent is running. While it writes all 16 corpus files and the executive slide, here are the exact prompts to paste into Hermes/Claude Code/Comet right now:
+
+📋 Paste This Into Claude Code / Hermes (Terminal — Live Key Test + GitHub Push)
+
+
+You are working in C:\Projects\APPS\fde-live-build
+Tasks in order:
+1. Read scripts\load_key.py to understand how the OpenAI key is loaded.
+2. Check if .env exists. If not, copy .env.example to .env and tell me 
+   what OPENAI_API_KEY value to paste in.
+3. Once the key is set, run:
+      rm -rf .index
+      python -m app.ingest
+   Confirm the output shows "dim": 1536 (NOT 512 — that means live embeddings)
+4. Run: python -m app.preflight
+   All checks must show [ OK ]. Report any [ FAIL ] lines.
+5. Run: python -m eval.run_eval
+   Report the full table and whether RESULT: PASS or FAIL.
+6. Run: python -m eval.calibration
+   Report the margin numbers and CALIBRATION: PASS or FAIL.
+7. If all pass: initialize git if not already done, do:
+      git add -A
+      git commit -m "feat: BFSI compliance advisor — live eval passing, 40 tests green"
+      git remote add origin https://github.com/Apolloat2022/fde-live-build.git
+      git push -u origin main
+   (Create the GitHub repo first at github.com/new if it doesn't exist)
+8. Report the GitHub URL so I can open it during the interview.
+📋 Paste This Into Comet (Domain Corpus Validator)
+
+
+You are working in C:\Projects\APPS\fde-live-build
+My subagent is writing 16 corpus files into subfolders under domains\:
+  domains\healthcare\   (HC-101 through HC-410)
+  domains\hr\           (HR-101 through HR-410)
+  domains\legal\        (LG-101 through LG-410)
+  domains\supply_chain\ (SC-101 through SC-410)
+Wait 3 minutes, then:
+1. List all files under domains\ and verify all 16 exist.
+2. For EACH domain folder, read all 4 files and confirm:
+   - Each file has an H1 title
+   - Each file has at least 4 H2 sections
+   - Each file contains at least 3 specific numbers (thresholds, SLAs, dollar amounts, percentages)
+3. For any file that is missing or incomplete, write it yourself following this rule:
+   - Document ID prefix in filename and H1
+   - 4-6 H2 sections
+   - Realistic policy content with specific numeric values
+4. After validating all 16 files, create a file:
+   C:\Projects\APPS\fde-live-build\domains\DOMAIN_NUMERICS_CHEATSHEET.md
+   That cheatsheet should be a single table with 4 columns:
+   Domain | File | Key Fact | Number/Threshold
+   
+   With every important number from every file — this is what I will 
+   memorize the night before the interview.
+5. Report when done.
+🎯 What Each Agent is Doing Right Now
+
+
+┌─────────────────────────────────────────────────────────┐
+│  ME (Antigravity) — Orchestrating                        │
+│  ✅ Briefed all 3 agents                                 │
+│  ⏳ Waiting for subagent corpus output                   │
+│  ⏳ Will review and coordinate final integration         │
+└─────────────────────────────────────────────────────────┘
+         │                    │                    │
+         ▼                    ▼                    ▼
+┌──────────────┐    ┌──────────────────┐    ┌────────────┐
+│  SUBAGENT    │    │  HERMES /        │    │   COMET    │
+│  (running)   │    │  CLAUDE CODE     │    │            │
+│              │    │                  │    │            │
+│ • EXECUTIVE  │    │ • Live key test  │    │ • Validate │
+│   SLIDE.md   │    │ • Rebuild index  │    │   16 files │
+│ • 16 corpus  │    │   at 1536-dim    │    │ • Write    │
+│   .md files  │    │ • Run live evals │    │   cheat-   │
+│   (4 domains)│    │ • Push to GitHub │    │   sheet    │
+└──────────────┘    └──────────────────┘    └────────────┘
+This is the exact same pattern the architect will watch you perform tomorrow — just with a different problem. You're literally practicing the skill right now.
+
+I'll notify you when my subagent finishes with the files. Paste those prompts into Hermes and Comet whenever you're ready.
+
