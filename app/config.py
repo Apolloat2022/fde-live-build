@@ -41,12 +41,23 @@ DENSE_WEIGHT = float(os.getenv("DENSE_WEIGHT", "0.6"))
 # cleanly (in-scope min ~8.2 vs out-of-scope max ~3.7) while the dense channel
 # overlaps, so lexical carries the gate and dense acts as a rescue path for
 # paraphrased questions that share few literal terms.
-MIN_LEXICAL_SCORE = float(os.getenv("MIN_LEXICAL_SCORE", "6.0"))
-MIN_DENSE_SCORE = float(os.getenv("MIN_DENSE_SCORE", "0.45"))
+MIN_LEXICAL_SCORE = float(os.getenv("MIN_LEXICAL_SCORE", "5.5"))
+MIN_DENSE_SCORE = float(os.getenv("MIN_DENSE_SCORE", "0.46"))
 MAX_QUESTION_CHARS = 2000
 
 REFUSAL_TEXT = (
-    "I don't have enough grounded information in the indexed policy documents "
-    "to answer that safely. Escalating to a human underwriter is the correct "
-    "next step."
+    "I don't have enough grounded information in the indexed documents "
+    "to answer that safely. Please escalate to a licensed advisor."
 )
+
+# --- Portkey gateway (chat only) -----------------------------------------
+# Anthropic publishes no embedding model, so the dense retrieval channel
+# cannot run through this gateway -- only chat/synthesis does. Embeddings
+# stay on OFFLINE_MODE's hash vectors or OpenAI, whichever is already active.
+# See HANDOFF.md section 5 for the calibration argument (BM25 carries the
+# grounding gate regardless of which chat provider answers).
+PORTKEY_API_KEY = os.getenv("PORTKEY_API_KEY", "").strip()
+PORTKEY_BASE_URL = os.getenv("PORTKEY_BASE_URL", "https://portkeygateway.perficient.com/v1")
+PORTKEY_MODEL = os.getenv("PORTKEY_MODEL", "claude-sonnet-4.5")
+PORTKEY_PROVIDER_HEADER = os.getenv("PORTKEY_PROVIDER_HEADER", "aws-bedrock-use2")
+USE_PORTKEY = bool(PORTKEY_API_KEY) and not OFFLINE_MODE

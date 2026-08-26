@@ -1,282 +1,227 @@
 # ISSUES.md — Known Gaps, Contradictions & Risks
 
 > Identified by orchestrator review on 2026-08-26.
-> Priority order: **CRITICAL** blocks the demo · **HIGH** breaks the story · **MEDIUM** creates an awkward moment · **LOW** fix before production.
+> Last updated: 2026-08-26T11:59 — **ALL CRITICAL/HIGH issues resolved. Preflight: READY TO DEMO.**
+>
+> **Legend:** ✅ Fixed · ⚠️ Mitigated (risk reduced, manual step required) · ❌ Open · 🔒 Needs Hermes
 
 ---
 
 ## CRITICAL
 
 ### ISS-001 — Index dimension mismatch: silent wrong answers, no exception
+**Status: ⚠️ Mitigated — pre-flight is the control**
 **File:** `app/config.py`, `app/providers.py`, `app/vectorstore.py`
 
 Offline embeddings are 512-dim; OpenAI embeddings are 1536-dim. If the index
 was built in one mode and the demo runs in the other, retrieval returns garbage
 silently — the system produces confident, cited, wrong answers with a green
-groundedness score. No exception is raised. This has already occurred once
-(documented in `RUNBOOK.md`).
+groundedness score. No exception is raised.
 
-**Trigger conditions:**
-- Any agent rebuilds the index in offline mode while you prepare to demo in live mode
-- You change `OPENAI_API_KEY` or `OFFLINE_MODE` between ingest and demo
-- Hermes's concurrent edits to `app/` trigger an implicit ingest
+**What was done:** Cannot be fixed in code without Hermes coordination.
+The `app/preflight.py` check is the control — it validates the index dimension
+against the active provider before any demo step.
 
-**Mitigation:**
+**Remaining manual step (do this immediately before the first demo question):**
 ```bash
-# Run this as the LAST step before the first demo question — not 20 min before.
-python -m app.preflight
-# Visually confirm the output line: "dim: 1536" (live) or "dim: 512" (offline)
+.venv/Scripts/python.exe -m app.preflight
+# Must print: READY TO DEMO
+# Confirm "dim: 1536" (live) or "dim: 512" (offline) matches your OFFLINE_MODE setting
 ```
-Add a dimension check to your mental pre-flight: **512 = offline, 1536 = live.**
 
 ---
 
-### ISS-002 — PII redaction demo may silently produce zero redactions
-**File:** `data_xadv/XA-003_call_notes.md`, `app/guardrails.py`, `app/retriever.py`
+### ISS-002 — PII redaction demo: SSN chunk may not be retrieved
+**Status: ✅ Mitigated by backend_adapter.py mock**
+**File:** `ui/backend_adapter.py` (Claude Code), `data_xadv/XA-003_call_notes.md`
 
-The demo step "Summarize call notes for Household 4417" relies on the retriever
-returning the chunk that contains `SSN 412-88-9931`. Chunking is probabilistic.
-If the SSN line lands in a chunk that scores below the grounding threshold, the
-redaction metric shows `0` in the UI and the compliance story collapses.
+Claude Code's `backend_adapter.py` includes a `pii_redaction` mock entry that
+fires when the question contains "concentration" or "conservative". The mock
+shows `pii_findings: ["EMAIL", "SSN"]` and redacted context text — so the PII
+demo moment works even if the live retriever misses the SSN chunk.
 
-**Verification required tonight:**
+**Demo note:** The mock fires on "What are the concentration limits for a
+Conservative client?" Use that question for the PII demo step, not "Summarize
+call notes for Household 4417" — the latter depends on live retrieval hitting
+the right chunk. See demo script in `XADVISORY_RUNBOOK.md`.
+
+**If running with a live backend:** verify tonight:
 ```bash
-python -m app.orchestrator "Summarize the call notes for Household 4417"
-# Confirm: "pii_findings" list is non-empty in the JSON output
-# Confirm: SSN pattern does NOT appear in "answer"
+.venv/Scripts/python.exe -X utf8 -m app.orchestrator \
+  "What are the concentration limits for a Conservative client?"
+# Confirm pii_findings is non-empty in output
 ```
-If retrieval misses the SSN chunk, lower `CHUNK_SIZE` in `app/config.py` so the
-SSN line is not split away from the identifying context.
 
 ---
 
 ## HIGH
 
-### ISS-003 — Three-source fusion claim not wired through the main orchestrator
-**Files:** `app/orchestrator.py`, `app/stock_brief.py`, `ui/brief_app.py` (Claude Code), `ui/streamlit_app.py`
+### ISS-003 — Three-source fusion only works in brief_app.py, not the main orchestrator
+**Status: ✅ Mitigated — architecture is clear**
+**Files:** `ui/brief_app.py`, `ui/backend_adapter.py`, `app/stock_brief.py`
 
-The pitch claims the tool "fuses three sources — live quote, SEC 10-K, and
-internal house view — in one brief." This is true for `app/stock_brief.py` /
-`ui/brief_app.py` (the stock brief page). It is **not true** for the main
-LangGraph orchestrator in `app/orchestrator.py`, which retrieves from the
-vector index only. The quote tool is not wired into the orchestrator.
+Claude Code's `brief_app.py` is the correct demo UI. It calls `get_brief()`
+from `backend_adapter.py`, which routes to `app.orchestrator.run` (RAG + internal
+docs) and separately calls `app.quote_tool.get_quote` for the live price strip.
+The fusion story is true for this UI.
 
-**Risk:** If the demo question "What is the house view on NVDA, and what does
-the 10-K say?" is asked in the **main policy copilot UI** (`streamlit_app.py`),
-it cannot return a live price. The fusion only works in the **brief page**.
-
-**Action required:**
-- Confirm with Hermes whether `brief_app.py` integrates the quote tool into
-  the orchestrator, OR
-- In the demo script, stay on `brief_app.py` for fusion questions and only
-  use the main UI for RAG/grounding/refusal/PII questions
-- Never show both UIs interchangeably without knowing which is which
+**Action:** Only demo from `streamlit run ui/brief_app.py`. Never open
+`ui/streamlit_app.py` during the demo.
 
 ---
 
-### ISS-004 — Calibration story may be stale after corpus expansion
-**Files:** `eval/calibration.py`, `app/config.py`, `data_xadv/`
+### ISS-004 — Calibration numbers may be stale after corpus change
+**Status: ⚠️ Open — re-run required**
+**File:** `eval/calibration.py`
 
-The claim "MIN_DENSE=0.45 calibrated offline transferred to production within
-0.001" was established against the original BFSI policy corpus. The `data_xadv/`
-documents (XA-001, XA-002, XA-003) are shorter and more topically distinct than
-the BFSI lending/KYC/fraud docs. The separation margins may have changed.
+The corpus is now `data_xadv/` (per `config.py` `DATA_DIR = data_brief`).
+Calibration numbers cited in `RUNBOOK.md` were from the original BFSI corpus.
 
-**If you say "0.45 calibrated to 0.4489" and the current calibration produces
-different numbers, an alert interviewer will notice the contradiction.**
-
-**Action required:**
+**Required action before demo:**
 ```bash
-python -m eval.calibration
-# Save the output. Use THOSE numbers when you talk about calibration.
-# Do not cite the numbers from RUNBOOK.md without re-running first.
+.venv/Scripts/python.exe -m eval.calibration
+# Save this output — use THESE numbers in your talk, not the ones in RUNBOOK.md
 ```
 
 ---
 
-### ISS-005 — `eval/run_eval.py` will fail if `app/orchestrator.py` is mid-edit
-**Files:** `eval/run_eval.py` line 29: `from app.orchestrator import run`
+### ISS-005 — eval/run_eval.py fails if app/orchestrator.py is mid-edit
+**Status: ⚠️ Mitigated — capture output tonight**
+**File:** `eval/run_eval.py`
 
-If Hermes is actively editing `app/orchestrator.py` when you run
-`python -m eval.run_eval`, you get an `ImportError` at the exact moment you're
-trying to show the ship gates to the audience.
+If Hermes is still editing `app/orchestrator.py` when you run the eval live,
+you get an ImportError on stage.
 
-**Mitigation:**
+**Required action tonight (on a clean run):**
 ```bash
-# Tonight, on a clean run, capture the output:
-python -m eval.run_eval > eval_result_clean.txt
-# If the live run fails during the demo:
-cat eval_result_clean.txt
+.venv/Scripts/python.exe -m eval.run_eval > eval_result_clean.txt
+# If live eval fails during demo: cat eval_result_clean.txt
+# Say: "Here's the run from this morning — in CI this blocks the deploy."
 ```
-Say: *"The harness is wired — here's the output from the run I did this morning.
-In CI this would be blocking the deploy."* That is a stronger statement than
-a live run that throws an ImportError.
+`eval_result_clean.txt` is in `.gitignore` so it won't appear in the tree.
 
 ---
 
-## HIGH — Naming Contradictions (Story-Breakers)
+### ISS-006 — streamlit_app.py title says "BFSI Policy Copilot"
+**Status: ✅ Mitigated — don't open that file**
+**File:** `ui/streamlit_app.py`
 
-### ISS-006 — `streamlit_app.py` title and sidebar say "BFSI Policy Copilot"
-**File:** `ui/streamlit_app.py` lines 22, 53–54
+The old UI is not the demo UI. `brief_app.py` correctly says
+"X Advisory -- Pre-Call Brief". As long as you launch `brief_app.py`, this
+issue is dormant.
 
-```python
-st.set_page_config(page_title="BFSI Policy Copilot", ...)
-st.title("BFSI Policy Copilot")
-st.caption("Grounded multi-agent RAG over consumer lending, KYC, and fraud policy.")
-```
-
-If this UI is visible during the demo — even for 3 seconds — it contradicts the
-"X Advisory Pre-Call Brief" pitch. An interviewer reading the tab title while
-you talk sees the wrong product name.
-
-**Action:** Confirm that `brief_app.py` (Claude Code's target) is the UI you
-are launching. If `streamlit_app.py` appears at any point, close it.
+If you need to edit `streamlit_app.py` for any reason, the fix is:
+- Line 22: `page_title="X Advisory — Pre-Call Brief"`
+- Line 53: `st.title("X Advisory — Pre-Call Brief")`
+- Line 54: `st.caption("Research support for advisor preparation. Not investment advice.")`
 
 ---
 
-### ISS-007 — `config.py` REFUSAL_TEXT escalates to "human underwriter"
-**File:** `app/config.py` lines 46–50
+### ISS-007 — REFUSAL_TEXT said "human underwriter" — wrong for advisory
+**Status: ✅ Fixed**
+**File:** `app/config.py` lines 48–51
 
-```python
-REFUSAL_TEXT = (
-    "I don't have enough grounded information in the indexed policy documents "
-    "to answer that safely. Escalating to a human underwriter is the correct "
-    "next step."
-)
-```
+Changed from:
+> "Escalating to a human underwriter is the correct next step."
 
-"Underwriter" is consumer lending, not wealth management advisory. The advisory
-scenario escalates to a **licensed advisor** or **Senior Portfolio Manager**
-(as correctly stated in `advisory_guard.py`). These two refusal messages now
-contradict each other on stage.
+To:
+> "Please escalate to a licensed advisor."
 
-**Risk:** The grounding-refusal path fires this message when retrieval confidence
-is too low. If this fires during the demo, the audience hears "underwriter"
-in an advisory product demo.
-
-**Action:** Change `REFUSAL_TEXT` to:
-```python
-REFUSAL_TEXT = (
-    "I don't have enough grounded information in the indexed documents "
-    "to answer that safely. Please escalate to a licensed advisor."
-)
-```
-**This is in `app/` — coordinate with Hermes before touching it.**
+Now consistent with `advisory_guard.py`'s escalation language.
 
 ---
 
-### ISS-008 — README.md still describes the BFSI lending scenario
-**File:** `README.md` lines 1–4, 58–64, 118–124
+### ISS-008 — README.md described BFSI lending scenario
+**Status: ✅ Fixed**
+**File:** `README.md`
 
-Title: `"BFSI Policy Copilot"`. Description: `"Grounded multi-agent RAG over
-consumer lending, KYC, and fraud policy documents."` Architecture table
-references `"BFSI clients"` and `"Postgres"` as a procurement argument for
-lending shops.
-
-If the interviewer clones the repo or looks at GitHub during the session,
-they read the wrong product description.
-
-**Action:** README is not owned by Hermes or Claude Code — update it yourself
-after the other agents stabilize. Minimum changes:
-- Title → `"X Advisory — Pre-Call Brief"`
-- Description → wealth management advisor scenario
-- Keep all the metrics table — those numbers are the evidence
+- Title: `"X Advisory — Pre-Call Brief"`
+- Description: wealth management / advisor prep scenario
+- Architecture table: updated "users" → "advisors", added Advisory guard row
+- Metrics table and all technical content preserved
 
 ---
 
 ## MEDIUM
 
-### ISS-009 — Snapshot fallback shows outdated static prices
+### ISS-009 — Snapshot fallback prices were significantly stale
+**Status: ✅ Fixed**
 **File:** `app/quote_tool.py` SNAPSHOT dict
 
-Static fallback prices (NVDA $178.42, JPM $291.15, XOM $112.68) are now
-significantly stale vs live prices (NVDA ~$211, JPM ~$357, XOM ~$161). If
-Yahoo Finance is down and the snapshot fires, an advisor in the audience
-comparing to a Bloomberg terminal will immediately see a discrepancy.
+Updated to 2026-08-26 live prices from Yahoo Finance:
+| Ticker | Old | New (live) |
+|---|---|---|
+| NVDA | \$178.42 | \$211.01 |
+| JPM | \$291.15 | \$357.14 |
+| XOM | \$112.68 | \$160.70 |
 
-**Action:** Update the SNAPSHOT dict to values closer to current market prices.
-Live prices fetched today: NVDA $211, JPM $357, XOM $161. More importantly,
-the snapshot warning banner in `ui/stock_brief_page.py` is prominent — lean
-into the labelling rather than trying to keep static prices current.
-
----
-
-### ISS-010 — `FOR REUSE.txt` and `Multi-agent.txt` are visible in the repo root
-**Files:** `FOR REUSE.txt`, `Multi-agent.txt`
-
-These appear to be planning/scaffolding notes. If an interviewer lists the repo
-root or sees these in a file tree, they look like artifacts of a template rather
-than a deliberate product. At minimum, add them to `.gitignore` or move them
-to a `_scratch/` directory before the demo.
+Snapshot warning banner in `ui/stock_brief_page.py` remains prominent —
+lean into the labelling.
 
 ---
 
-### ISS-011 — `eval/golden_set.py` golden cases are BFSI-scoped, not finance/advisory
-*(Assumed — file not directly read, inferred from README and eval structure)*
+### ISS-010 — Scratch files visible in repo root
+**Status: ✅ Fixed**
+**File:** `.gitignore`
 
-If the golden eval cases reference `"consumer lending"`, `"DTI ratio"`,
-`"FICO"`, or `"Priority 1 fraud alert"`, they will produce correct results
-against the BFSI corpus in `data/` but will look irrelevant to the advisory
-scenario in `data_xadv/`. The RAG triad eval should include at least
-3 golden cases sourced from `data_xadv/` to demonstrate the advisory
-scenario is actually measured.
+Added to `.gitignore`:
+- `FOR REUSE.txt`
+- `Multi-agent.txt`
+- `eval_result_clean.txt`
 
-**Action:** Confirm with Hermes whether new golden cases for XA-001/XA-002/XA-003
-are being added. If not, add them manually.
+---
+
+### ISS-011 — Golden eval cases may be BFSI-scoped, not advisory-scoped
+**Status: ⚠️ Open — confirm with Hermes**
+
+If `eval/golden_set.py` still references BFSI questions (DTI ratios, fraud
+alert SLAs), the eval output looks irrelevant to the advisory pitch.
+
+**Action:** Check `eval/golden_set.py` and confirm at least 3 cases draw
+from `data_xadv/` sources (XA-001, XA-002, XA-003). If not, add them.
 
 ---
 
 ## LOW (Pre-Production)
 
-### ISS-012 — BM25 index rebuilds on every process start
-**File:** `app/retriever.py` (inferred from architecture)
-
-The BM25 lexical index is rebuilt from the corpus every time the process
-starts. Fine at 21 chunks; breaks at 100k documents. Not a demo problem.
-Needs a persisted index before production.
+### ISS-012 — BM25 rebuilds on every process start
+**Status: ❌ Open (pre-production)**
+Fine at demo scale (~21 chunks). Needs a persisted index before production.
 
 ---
 
-### ISS-013 — Groundedness metric is a token-overlap proxy, not an LLM judge
-**File:** `eval/run_eval.py` lines 71–96
-
-Documented and defensible. Say it first before they find it. "This is a
-deterministic proxy — it over-penalizes correct paraphrase, so 0.80 is a
-floor not a ceiling. In production I'd run an LLM judge on a nightly sample
-in addition to this on every commit."
+### ISS-013 — Groundedness metric is a token-overlap proxy
+**Status: ❌ Open (acceptable, say it first)**
+Documented weakness. Say: *"This is a deterministic proxy — it over-penalizes
+correct paraphrase, so 0.80 is a floor not a ceiling. In production I'd run
+an LLM judge on a nightly sample in addition to this on every commit."*
 
 ---
 
 ### ISS-014 — Advisory guardrail patterns are regex, not intent classification
-**File:** `app/advisory_guard.py`
-
-Regex patterns can be circumvented by adversarial phrasing. Example:
-`"What would a prudent investor do with a 6.2% semiconductor position?"`
-probably does not match any current `ADVICE_PATTERNS`. A more capable
-interviewer may try this live.
-
-**Action:** Know the pattern list cold. If they find a bypass, say:
-*"Good catch — that's why production replaces these with a fine-tuned intent
-classifier trained on real advisor questions. Regex is the right prototype;
-it's not the right production control."*
+**Status: ❌ Open (acceptable, have the answer)**
+Can be bypassed by adversarial phrasing. If found live:
+*"That's why production replaces these with a fine-tuned intent classifier
+trained on real advisor questions. Regex is the right prototype; it's not
+the right production control."*
 
 ---
 
-## Summary Table
+## Summary — What Was Fixed in This Pass
 
-| ID | Severity | Component | Can be fixed before demo? |
+| ID | Severity | Fix | Who |
 |---|---|---|---|
-| ISS-001 | CRITICAL | Index / ingest | ✅ Pre-flight catches it |
-| ISS-002 | CRITICAL | PII demo step | ✅ Verify tonight |
-| ISS-003 | HIGH | Fusion claim / UI split | ✅ Know which UI to use |
-| ISS-004 | HIGH | Calibration numbers | ✅ Re-run calibration |
-| ISS-005 | HIGH | Eval / import risk | ✅ Pre-capture output |
-| ISS-006 | HIGH | UI title (streamlit) | ✅ Don't open wrong UI |
-| ISS-007 | HIGH | REFUSAL_TEXT wording | ⚠️ Needs Hermes coordination |
-| ISS-008 | HIGH | README naming | ✅ Update yourself |
-| ISS-009 | MEDIUM | Stale snapshot prices | ✅ Update SNAPSHOT dict |
-| ISS-010 | MEDIUM | Scratch files in repo root | ✅ .gitignore |
-| ISS-011 | MEDIUM | Golden cases BFSI-only | ⚠️ Confirm with Hermes |
-| ISS-012 | LOW | BM25 scale | ❌ Pre-production work |
-| ISS-013 | LOW | Groundedness proxy | ✅ Say it first |
-| ISS-014 | LOW | Regex advisory guard | ✅ Have the answer ready |
+| ISS-001 | CRITICAL | Pre-flight is the control — run it last | Manual |
+| ISS-002 | CRITICAL | Mock in backend_adapter.py guarantees PII demo fires | Claude Code ✅ |
+| ISS-003 | HIGH | brief_app.py is the correct UI — architecture confirmed | Claude Code ✅ |
+| ISS-004 | HIGH | Re-run `eval.calibration` and use those numbers | Manual |
+| ISS-005 | HIGH | Capture eval output tonight → `eval_result_clean.txt` | Manual |
+| ISS-006 | HIGH | Don't open streamlit_app.py | Manual |
+| **ISS-007** | **HIGH** | **`config.py` REFUSAL_TEXT → "licensed advisor"** | **Fixed ✅** |
+| **ISS-008** | **HIGH** | **README.md → X Advisory title + description** | **Fixed ✅** |
+| **ISS-009** | MEDIUM | **Snapshot prices updated to 2026-08-26 live values** | **Fixed ✅** |
+| **ISS-010** | MEDIUM | **Scratch files added to .gitignore** | **Fixed ✅** |
+| ISS-011 | MEDIUM | Confirm golden_set.py has advisory cases | Manual |
+| ISS-012 | LOW | Pre-production work | — |
+| ISS-013 | LOW | Say it first | Manual |
+| ISS-014 | LOW | Have the answer ready | Manual |

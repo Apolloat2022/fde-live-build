@@ -109,14 +109,29 @@ def chat(prompt: str, system: str = "", temperature: float = 0.0) -> str:
         return _extractive_answer(prompt)
     from langchain_openai import ChatOpenAI
 
-    llm = ChatOpenAI(
-        model=config.CHAT_MODEL,
-        temperature=temperature,
-        api_key=config.OPENAI_API_KEY,
-    )
+    if config.USE_PORTKEY:
+        # Portkey is OpenAI-compatible; only the base_url/key/header differ.
+        # Dense embeddings never route here -- see config.PORTKEY_* comment.
+        llm = ChatOpenAI(
+            model=config.PORTKEY_MODEL,
+            temperature=temperature,
+            api_key=config.PORTKEY_API_KEY,
+            base_url=config.PORTKEY_BASE_URL,
+            default_headers={"x-portkey-provider": config.PORTKEY_PROVIDER_HEADER},
+        )
+    else:
+        llm = ChatOpenAI(
+            model=config.CHAT_MODEL,
+            temperature=temperature,
+            api_key=config.OPENAI_API_KEY,
+        )
     messages = ([("system", system)] if system else []) + [("human", prompt)]
     return llm.invoke(messages).content.strip()
 
 
 def provider_label() -> str:
-    return "offline-deterministic" if config.OFFLINE_MODE else f"openai:{config.CHAT_MODEL}"
+    if config.OFFLINE_MODE:
+        return "offline-deterministic"
+    if config.USE_PORTKEY:
+        return f"portkey:{config.PORTKEY_MODEL}"
+    return f"openai:{config.CHAT_MODEL}"

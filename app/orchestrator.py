@@ -2,14 +2,15 @@
 
 Graph topology:
 
-    triage ──(refuse)──────────────────────────────► finalize
+    triage ──(refuse)──────────────────────────────────────────► finalize
        │
-       └─(retrieve)──► retrieve ──► ground_check ──(refuse)──► finalize
-                                        │
-                                        └─(ok)──► answer ──► verify ──► finalize
+       └─(quote)──► quote ──► retrieve ──► ground_check ──(refuse)──► finalize
+                                                │
+                                                └─(ok)──► answer ──► verify ──► finalize
 
 Roles (each node is a narrow "agent" with one job):
   triage       - classify intent, run input guardrails, rewrite query w/ memory
+  quote        - live market quote when the question names a covered ticker
   retrieve     - hybrid search over the policy index
   ground_check - refuse rather than answer from weak evidence
   answer       - grounded generation with inline [S#] citations
@@ -21,17 +22,30 @@ follow-ups like "and what about high risk?" resolve against the prior turn.
 """
 from __future__ import annotations
 
+import re
 import time
-from typing import Annotated, Any, Dict, List, Literal, TypedDict
+from typing import Annotated, Any, Dict, List, Literal, Optional, TypedDict
 
 from langgraph.graph import END, StateGraph
 
 from app import config, guardrails
 from app.advisory_guard import check_advisory
 from app.providers import chat, provider_label
+from app.quote_tool import format_quote, get_quote
 from app.retriever import Hit, Retriever
 
 MEMORY_TURNS = 4
+
+# Tickers covered by the SEC filing corpus. A quote is only fetched when one
+# of these is named -- fetching for an arbitrary ticker would return a quote
+# with no matching filing to fuse it against.
+_COVERED_TICKERS = {"NVDA", "JPM", "XOM"}
+_TICKER_RE = re.compile(r"\b(" + "|".join(_COVERED_TICKERS) + r")\b", re.I)
+
+
+def _detect_ticker(text: str) -> Optional[str]:
+    m = _TICKER_RE.search(text or "")
+    return m.group(1).upper() if m else None
 
 
 class AgentState(TypedDict, total=False):
@@ -39,6 +53,9 @@ class AgentState(TypedDict, total=False):
     rewritten: str
     intent: str
     history: List[Dict[str, str]]
+    ticker: str
+    quote: Dict[str, Any]
+    quote_hit: Hit
     hits: List[Hit]
     draft: str
     answer: str
@@ -115,16 +132,51 @@ def triage(state: AgentState) -> AgentState:
     }
 
 
+def quote(state: AgentState) -> AgentState:
+    """Fetch a live market quote when the question names a covered ticker.
+
+    Wrapped as a Hit so it flows through the SAME context/citation/verify
+    machinery as retrieved chunks -- no special-casing downstream. Appended
+    to `hits` in `retrieve`, never made hits[0], so it never influences the
+    ground_check confidence gate: a live price does not make an otherwise
+    out-of-scope question grounded.
+    """
+    t0 = time.time()
+    ticker = _detect_ticker(state["rewritten"])
+    if not ticker:
+        return {"trace": [_step("quote", t0, ticker=None)]}
+
+    q = get_quote(ticker)
+    hit = Hit(
+        chunk_id=f"quote::{ticker}",
+        source=f"QUOTE-{ticker}",
+        section="Live Market Quote",
+        text=format_quote(q),
+        score=1.0, dense=1.0, lexical=1.0,
+        raw_dense=1.0, raw_lexical=config.MIN_LEXICAL_SCORE,
+    )
+    return {
+        "ticker": ticker,
+        "quote": q,
+        "quote_hit": hit,
+        "trace": [_step("quote", t0, ticker=ticker, source=q["source"])],
+    }
+
+
 def retrieve(state: AgentState) -> AgentState:
     t0 = time.time()
     # Comparison questions need a wider net to cover both sides.
     k = config.TOP_K + 2 if state.get("intent") == "comparison" else config.TOP_K
     hits = get_retriever().search(state["rewritten"], top_k=k)
+    quote_hit = state.get("quote_hit")
+    if quote_hit is not None:
+        hits = hits + [quote_hit]
     # Source mix makes the fusion visible: an advisor can see the brief drew
-    # on the filing AND the house view, not just one of them.
+    # on the filing AND the house view AND a live quote, not just one of them.
     mix = []
     for h in hits:
-        kind = ("SEC filing" if h.source.startswith("SEC-")
+        kind = ("Live quote" if h.source.startswith("QUOTE-")
+                else "SEC filing" if h.source.startswith("SEC-")
                 else "X Advisory internal")
         if kind not in mix:
             mix.append(kind)
@@ -262,8 +314,8 @@ def finalize(state: AgentState) -> AgentState:
 
 
 # ------------------------------------------------------------------ edges
-def route_after_triage(state: AgentState) -> Literal["retrieve", "finalize"]:
-    return "finalize" if state.get("refused") else "retrieve"
+def route_after_triage(state: AgentState) -> Literal["quote", "finalize"]:
+    return "finalize" if state.get("refused") else "quote"
 
 
 def route_after_ground(state: AgentState) -> Literal["answer", "finalize"]:
@@ -273,6 +325,7 @@ def route_after_ground(state: AgentState) -> Literal["answer", "finalize"]:
 def build_graph():
     g = StateGraph(AgentState)
     g.add_node("triage", triage)
+    g.add_node("quote", quote)
     g.add_node("retrieve", retrieve)
     g.add_node("ground_check", ground_check)
     g.add_node("answer", answer)
@@ -281,7 +334,8 @@ def build_graph():
 
     g.set_entry_point("triage")
     g.add_conditional_edges("triage", route_after_triage,
-                            {"retrieve": "retrieve", "finalize": "finalize"})
+                            {"quote": "quote", "finalize": "finalize"})
+    g.add_edge("quote", "retrieve")
     g.add_edge("retrieve", "ground_check")
     g.add_conditional_edges("ground_check", route_after_ground,
                             {"answer": "answer", "finalize": "finalize"})
@@ -306,7 +360,7 @@ def run(question: str, history: List[Dict[str, str]] | None = None) -> Dict[str,
     t0 = time.time()
     out = get_graph().invoke({"question": question, "history": history or [], "trace": []})
     hits = out.get("hits") or []
-    return {
+    result = {
         "question": question,
         "answer": out.get("answer", ""),
         "refused": bool(out.get("refused")),
@@ -325,7 +379,13 @@ def run(question: str, history: List[Dict[str, str]] | None = None) -> Dict[str,
         "trace": out.get("trace", []),
         "latency_ms": round((time.time() - t0) * 1000, 1),
         "provider": provider_label(),
+        "quote": out.get("quote"),
     }
+    # Persist the run as a durable audit record. Never raises.
+    from app import observability
+    result["source_mix"] = out.get("source_mix") or []
+    result["run_id"] = observability.emit(result)
+    return result
 
 
 if __name__ == "__main__":

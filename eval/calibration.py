@@ -14,28 +14,29 @@ from app import config
 from app.retriever import Retriever
 
 IN_SCOPE = [
-    "What is the maximum DTI for the Standard tier?",
-    "How often are high risk customers reviewed?",
-    "What triggers a hard block on card transactions?",
-    "What compensating factors are acceptable?",
-    "When must an adverse action notice be sent?",
-    "What is required for Enhanced Due Diligence?",
-    "What is the beneficial ownership threshold?",
-    "How fast must a Priority 1 fraud alert be dispositioned?",
-    "What documents must a self-employed applicant provide?",
-    "When does a wire transfer need dual authorization?",
+    "What is X Advisory's current house view on semiconductor equities?",
+    "What is the maximum equity allocation for a Conservative tier client?",
+    "What is the single-stock concentration cap for a Balanced client?",
+    "How often is the house view refreshed?",
+    "What triggers a mandatory rebalancing review?",
+    "What does NVIDIA disclose as its top risk factor in its 10-K?",
+    "What are the regulatory requirements for client interaction logs?",
+    "What is the sector exposure limit per client portfolio?",
+    "What suitability tiers does X Advisory use?",
+    "What did JPMorgan report as total assets in its most recent 10-K?",
 ]
 
 OUT_OF_SCOPE = [
     "What is the capital of France?",
     "How do I bake sourdough bread?",
-    "What is our crypto custody policy?",
     "Who won the 2022 World Cup?",
-    "What is the policy on employee parental leave?",
     "Tell me a joke about pirates",
-    "What is our commercial real estate lending limit?",
     "How much vacation do analysts get?",
+    "What is the IT helpdesk phone number?",
+    "How do I reset my corporate password?",
+    "What is the cafeteria menu for this week?",
 ]
+
 
 
 def main() -> None:

@@ -1,11 +1,15 @@
-# BFSI Policy Copilot
+# X Advisory — Pre-Call Brief
 
-Grounded multi-agent RAG over consumer lending, KYC, and fraud policy
-documents. Built as a 2.5-hour live-build reference implementation.
+Grounded multi-agent RAG for wealth management advisor preparation.
+Takes a ticker or question and returns a structured, fully-cited brief
+fusing live market quotes (Yahoo Finance), real SEC 10-K filings (EDGAR),
+and X Advisory internal docs (house view, suitability policy, call notes).
+
+Built as a 2.5-hour live-build reference implementation.
 
 The point of this repo is not that it answers questions. It is that it
-**measures whether the answers are trustworthy**, and refuses when they
-aren't.
+**measures whether the answers are trustworthy**, refuses when they aren't,
+and never produces investment advice — by design, not by accident.
 
 ## Quickstart
 
@@ -58,9 +62,10 @@ everything else is unchanged.
 | Layer | Choice | Why |
 |---|---|---|
 | Orchestration | LangGraph | explicit state machine; conditional refusal edges are first-class |
-| Retrieval | dense + BM25 hybrid | users search by identifier *and* by paraphrase |
+| Retrieval | dense + BM25 hybrid | advisors search by identifier *and* by paraphrase |
 | Vector store | ChromaDB, with a JSON fallback | one `VectorStore` interface; parity asserted by tests, so a backend failure can't take the demo down |
 | Generation | OpenAI, or deterministic extractive fallback | demo cannot fail on network or credentials |
+| Advisory guard | pattern-matched intent gate | refuses advice/price-target requests before retrieval runs (Investment Advisers Act) |
 | Memory | rolling window + coreference rewrite | follow-ups resolve without a full agent loop |
 
 ## Pre-flight
